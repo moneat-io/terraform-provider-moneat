@@ -105,6 +105,29 @@ func (p *MoneatProvider) Resources(_ context.Context) []func() resource.Resource
 		NewDashboardResource,
 		NewNotificationPreferencesResource,
 		NewAlertNotificationChannelsResource,
+		// Phase 2
+		NewCustomDataSourceResource,
+		NewLogIndexResource,
+		NewSilencePeriodResource,
+		NewDashboardAlertResource,
+		NewDashboardFolderResource,
+		NewStatusPageMonitorResource,
+		NewStatusPageIncidentResource,
+		NewStatusPageCustomDomainResource,
+		NewOnCallScheduleResource,
+		NewOnCallOverrideResource,
+		NewEscalationPolicyResource,
+		NewIncidentProviderResource,
+		NewIncidentRoutingRuleResource,
+		NewSyntheticTestResource,
+		// Phase 3
+		NewOrgMemberResource,
+		NewOrgInvitationResource,
+		NewAuthTokenResource,
+		NewLogAPIKeyResource,
+		NewAgentAPIKeyResource,
+		NewSSOConfigResource,
+		NewDebuggerProbeResource,
 	}
 }
 
@@ -112,5 +135,9 @@ func (p *MoneatProvider) DataSources(_ context.Context) []func() datasource.Data
 	return []func() datasource.DataSource{
 		NewProjectDataSource,
 		NewProjectsDataSource,
+		NewUptimeMonitorsDataSource,
+		NewStatusPagesDataSource,
+		NewDashboardsDataSource,
+		NewOrgMembersDataSource,
 	}
 }

@@ -63,6 +63,16 @@ func (c *Client) UpdateUptimeMonitor(id string, req UpdateUptimeMonitorRequest) 
 	return &monitor, nil
 }
 
+// ListUptimeMonitors retrieves all uptime monitors.
+func (c *Client) ListUptimeMonitors() ([]UptimeMonitor, error) {
+	var monitors []UptimeMonitor
+	err := c.doRequest(http.MethodGet, "/v1/uptime/monitors", nil, &monitors)
+	if err != nil {
+		return nil, err
+	}
+	return monitors, nil
+}
+
 // DeleteUptimeMonitor deletes an uptime monitor by ID.
 func (c *Client) DeleteUptimeMonitor(id string) error {
 	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/uptime/monitors/%s", id), nil, nil)
