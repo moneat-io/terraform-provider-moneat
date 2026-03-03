@@ -213,3 +213,124 @@ func (c *Client) UpdateEscalationPolicy(id string, req UpdateEscalationPolicyReq
 func (c *Client) DeleteEscalationPolicy(id string) error {
 	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/on-call/escalation-policies/%s", id), nil, nil)
 }
+
+// OnCallPriorities represents on-call priority configuration.
+type OnCallPriorities struct {
+	Priorities []OnCallPriority `json:"priorities"`
+}
+
+// OnCallPriority represents a single priority level.
+type OnCallPriority struct {
+	Level    string `json:"level"`
+	Label    string `json:"label"`
+	Pageable bool   `json:"pageable"`
+}
+
+// UpdateOnCallPrioritiesRequest is the request body for updating on-call priorities.
+type UpdateOnCallPrioritiesRequest struct {
+	Priorities []OnCallPriority `json:"priorities"`
+}
+
+// GetOnCallPriorities retrieves on-call priority configuration.
+func (c *Client) GetOnCallPriorities() (*OnCallPriorities, error) {
+	var priorities OnCallPriorities
+	err := c.doRequest(http.MethodGet, "/v1/priorities", nil, &priorities)
+	if err != nil {
+		return nil, err
+	}
+	return &priorities, nil
+}
+
+// UpdateOnCallPriorities updates on-call priority configuration.
+func (c *Client) UpdateOnCallPriorities(req UpdateOnCallPrioritiesRequest) (*OnCallPriorities, error) {
+	var priorities OnCallPriorities
+	err := c.doRequest(http.MethodPut, "/v1/priorities", req, &priorities)
+	if err != nil {
+		return nil, err
+	}
+	return &priorities, nil
+}
+
+// BusinessHours represents business hours configuration.
+type BusinessHours struct {
+	Timezone string              `json:"timezone"`
+	Enabled  bool                `json:"enabled"`
+	Windows  []BusinessHoursSlot `json:"windows"`
+}
+
+// BusinessHoursSlot represents a business hours time window.
+type BusinessHoursSlot struct {
+	Day       string `json:"day"`
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
+}
+
+// UpdateBusinessHoursRequest is the request body for updating business hours.
+type UpdateBusinessHoursRequest struct {
+	Timezone string              `json:"timezone"`
+	Enabled  bool                `json:"enabled"`
+	Windows  []BusinessHoursSlot `json:"windows"`
+}
+
+// GetBusinessHours retrieves business hours configuration.
+func (c *Client) GetBusinessHours() (*BusinessHours, error) {
+	var hours BusinessHours
+	err := c.doRequest(http.MethodGet, "/v1/business-hours", nil, &hours)
+	if err != nil {
+		return nil, err
+	}
+	return &hours, nil
+}
+
+// UpdateBusinessHours updates business hours configuration.
+func (c *Client) UpdateBusinessHours(req UpdateBusinessHoursRequest) (*BusinessHours, error) {
+	var hours BusinessHours
+	err := c.doRequest(http.MethodPut, "/v1/business-hours", req, &hours)
+	if err != nil {
+		return nil, err
+	}
+	return &hours, nil
+}
+
+// OnCallScheduleSlackUsergroup represents a Slack usergroup mapping for an on-call schedule.
+type OnCallScheduleSlackUsergroup struct {
+	ScheduleID      string `json:"scheduleId"`
+	UsergroupID     string `json:"usergroupId"`
+	UsergroupHandle string `json:"usergroupHandle"`
+}
+
+// SetOnCallScheduleSlackUsergroupRequest is the request body for setting a Slack usergroup mapping.
+type SetOnCallScheduleSlackUsergroupRequest struct {
+	UsergroupID     string `json:"usergroupId"`
+	UsergroupHandle string `json:"usergroupHandle"`
+}
+
+// GetOnCallScheduleSlackUsergroup retrieves the Slack usergroup mapping for a schedule.
+func (c *Client) GetOnCallScheduleSlackUsergroup(scheduleID string) (*OnCallScheduleSlackUsergroup, error) {
+	var mapping OnCallScheduleSlackUsergroup
+	path := fmt.Sprintf("/v1/on-call/schedules/%s/slack-usergroup", scheduleID)
+	err := c.doRequest(http.MethodGet, path, nil, &mapping)
+	if err != nil {
+		return nil, err
+	}
+	return &mapping, nil
+}
+
+// SetOnCallScheduleSlackUsergroup sets the Slack usergroup mapping for a schedule.
+func (c *Client) SetOnCallScheduleSlackUsergroup(
+	scheduleID string, req SetOnCallScheduleSlackUsergroupRequest,
+) (*OnCallScheduleSlackUsergroup, error) {
+	var mapping OnCallScheduleSlackUsergroup
+	path := fmt.Sprintf("/v1/on-call/schedules/%s/slack-usergroup", scheduleID)
+	err := c.doRequest(http.MethodPut, path, req, &mapping)
+	if err != nil {
+		return nil, err
+	}
+	return &mapping, nil
+}
+
+// DeleteOnCallScheduleSlackUsergroup removes the Slack usergroup mapping for a schedule.
+func (c *Client) DeleteOnCallScheduleSlackUsergroup(scheduleID string) error {
+	path := fmt.Sprintf("/v1/on-call/schedules/%s/slack-usergroup", scheduleID)
+	return c.doRequest(http.MethodDelete, path, nil, nil)
+}

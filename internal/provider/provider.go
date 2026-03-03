@@ -128,6 +128,10 @@ func (p *MoneatProvider) Resources(_ context.Context) []func() resource.Resource
 		NewAgentAPIKeyResource,
 		NewSSOConfigResource,
 		NewDebuggerProbeResource,
+		NewOnCallPrioritiesResource,
+		NewBusinessHoursResource,
+		NewOnCallScheduleSlackUsergroupResource,
+		NewProjectNotificationPreferencesResource,
 	}
 }
 
@@ -135,9 +139,16 @@ func (p *MoneatProvider) DataSources(_ context.Context) []func() datasource.Data
 	return []func() datasource.DataSource{
 		NewProjectDataSource,
 		NewProjectsDataSource,
+		NewHostDataSource,
+		NewHostsDataSource,
+		NewUptimeMonitorDataSource,
 		NewUptimeMonitorsDataSource,
+		NewStatusPageDataSource,
 		NewStatusPagesDataSource,
+		NewDashboardDataSource,
 		NewDashboardsDataSource,
+		NewOnCallScheduleDataSource,
+		NewEscalationPolicyDataSource,
 		NewOrgMembersDataSource,
 	}
 }

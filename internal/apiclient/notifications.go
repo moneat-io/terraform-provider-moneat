@@ -1,6 +1,9 @@
 package apiclient
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 // NotificationPreferences represents global notification preferences.
 type NotificationPreferences struct {
@@ -72,4 +75,53 @@ func (c *Client) UpdateAlertNotificationChannels(req UpdateAlertNotificationChan
 		return nil, err
 	}
 	return &channels, nil
+}
+
+// ProjectNotificationPreferences represents per-project notification preferences.
+type ProjectNotificationPreferences struct {
+	ProjectID             string `json:"projectId"`
+	IssueAlerts           bool   `json:"issueAlerts"`
+	ErrorAlerts           bool   `json:"errorAlerts"`
+	WeeklySummary         bool   `json:"weeklySummary"`
+	AlertFrequencyMinutes int64  `json:"alertFrequencyMinutes"`
+}
+
+// UpdateProjectNotificationPreferencesRequest is the request for updating per-project preferences.
+type UpdateProjectNotificationPreferencesRequest struct {
+	IssueAlerts           bool  `json:"issueAlerts"`
+	ErrorAlerts           bool  `json:"errorAlerts"`
+	WeeklySummary         bool  `json:"weeklySummary"`
+	AlertFrequencyMinutes int64 `json:"alertFrequencyMinutes"`
+}
+
+// GetProjectNotificationPreferences retrieves per-project notification preferences.
+func (c *Client) GetProjectNotificationPreferences(
+	projectID string,
+) (*ProjectNotificationPreferences, error) {
+	var prefs ProjectNotificationPreferences
+	path := fmt.Sprintf("/v1/notification-preferences/%s", projectID)
+	err := c.doRequest(http.MethodGet, path, nil, &prefs)
+	if err != nil {
+		return nil, err
+	}
+	return &prefs, nil
+}
+
+// UpdateProjectNotificationPreferences updates per-project notification preferences.
+func (c *Client) UpdateProjectNotificationPreferences(
+	projectID string, req UpdateProjectNotificationPreferencesRequest,
+) (*ProjectNotificationPreferences, error) {
+	var prefs ProjectNotificationPreferences
+	path := fmt.Sprintf("/v1/notification-preferences/%s", projectID)
+	err := c.doRequest(http.MethodPut, path, req, &prefs)
+	if err != nil {
+		return nil, err
+	}
+	return &prefs, nil
+}
+
+// DeleteProjectNotificationPreferences resets per-project notification preferences.
+func (c *Client) DeleteProjectNotificationPreferences(projectID string) error {
+	path := fmt.Sprintf("/v1/notification-preferences/%s", projectID)
+	return c.doRequest(http.MethodDelete, path, nil, nil)
 }
