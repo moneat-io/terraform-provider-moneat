@@ -110,3 +110,28 @@ func IsNotFound(err error) bool {
 	}
 	return false
 }
+
+func notFoundError(message string) error {
+	return &APIError{
+		StatusCode: http.StatusNotFound,
+		Message:    message,
+	}
+}
+
+func rawIDToString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
+	}
+
+	var number json.Number
+	if json.Unmarshal(raw, &number) == nil {
+		return number.String()
+	}
+
+	return ""
+}

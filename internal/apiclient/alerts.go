@@ -38,7 +38,7 @@ type UpdateSystemAlertRequest struct {
 // GetSystemAlert retrieves a system alert by ID.
 func (c *Client) GetSystemAlert(systemID, alertID string) (*SystemAlert, error) {
 	var alert SystemAlert
-	path := fmt.Sprintf("/v1/monitor/systems/%s/alerts/%s", systemID, alertID)
+	path := fmt.Sprintf("/v1/monitor/hosts/%s/alerts/%s", systemID, alertID)
 	err := c.doRequest(http.MethodGet, path, nil, &alert)
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (c *Client) GetSystemAlert(systemID, alertID string) (*SystemAlert, error) 
 // CreateSystemAlert creates a new system alert.
 func (c *Client) CreateSystemAlert(systemID string, req CreateSystemAlertRequest) (*SystemAlert, error) {
 	var alert SystemAlert
-	path := fmt.Sprintf("/v1/monitor/systems/%s/alerts", systemID)
+	path := fmt.Sprintf("/v1/monitor/hosts/%s/alerts", systemID)
 	err := c.doRequest(http.MethodPost, path, req, &alert)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (c *Client) CreateSystemAlert(systemID string, req CreateSystemAlertRequest
 // UpdateSystemAlert updates an existing system alert.
 func (c *Client) UpdateSystemAlert(systemID, alertID string, req UpdateSystemAlertRequest) (*SystemAlert, error) {
 	var alert SystemAlert
-	path := fmt.Sprintf("/v1/monitor/systems/%s/alerts/%s", systemID, alertID)
+	path := fmt.Sprintf("/v1/monitor/hosts/%s/alerts/%s", systemID, alertID)
 	err := c.doRequest(http.MethodPut, path, req, &alert)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (c *Client) UpdateSystemAlert(systemID, alertID string, req UpdateSystemAle
 
 // DeleteSystemAlert deletes a system alert by ID.
 func (c *Client) DeleteSystemAlert(systemID, alertID string) error {
-	path := fmt.Sprintf("/v1/monitor/systems/%s/alerts/%s", systemID, alertID)
+	path := fmt.Sprintf("/v1/monitor/hosts/%s/alerts/%s", systemID, alertID)
 	return c.doRequest(http.MethodDelete, path, nil, nil)
 }
 
