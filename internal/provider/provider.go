@@ -132,6 +132,17 @@ func (p *MoneatProvider) Resources(_ context.Context) []func() resource.Resource
 		NewBusinessHoursResource,
 		NewOnCallScheduleSlackUsergroupResource,
 		NewProjectNotificationPreferencesResource,
+		// Current Moneat API coverage
+		NewFeatureFlagEnvironmentResource,
+		NewFeatureFlagSegmentResource,
+		NewFeatureFlagSdkKeyResource,
+		NewFeatureFlagResource,
+		NewFeatureFlagConfigResource,
+		NewWorkflowResource,
+		NewSyntheticVariableResource,
+		NewMcpAPIKeyResource,
+		NewOtlpServiceMappingResource,
+		NewProjectTargetResource,
 	}
 }
 

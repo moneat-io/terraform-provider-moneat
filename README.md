@@ -86,6 +86,21 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 | `moneat_notification_preferences` | Global notification settings |
 | `moneat_alert_notification_channels` | Per-source notification channel preferences |
 
+### Additional API Coverage
+
+| Resource | Description |
+|----------|-------------|
+| `moneat_feature_flag` | Feature flag definitions and variants |
+| `moneat_feature_flag_config` | Per-environment feature flag rollout config |
+| `moneat_feature_flag_environment` | Feature flag environments |
+| `moneat_feature_flag_segment` | Feature flag targeting segments |
+| `moneat_feature_flag_sdk_key` | Feature flag SDK keys |
+| `moneat_workflow` | Alert and automation workflows |
+| `moneat_synthetic_variable` | Reusable synthetic test variables |
+| `moneat_mcp_api_key` | MCP API keys and tool/resource permissions |
+| `moneat_otlp_service_mapping` | Telemetry service-to-project routing |
+| `moneat_project_target` | Additional project DSN targets |
+
 ### Data Sources
 
 | Data Source | Description |

@@ -78,3 +78,70 @@ func (c *Client) UpdateSyntheticTest(id string, req UpdateSyntheticTestRequest) 
 func (c *Client) DeleteSyntheticTest(id string) error {
 	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/synthetics/tests/%s", id), nil, nil)
 }
+
+// SyntheticVariable represents a global synthetic test variable.
+type SyntheticVariable struct {
+	ID             int    `json:"id"`
+	OrganizationID int    `json:"organizationId,omitempty"`
+	Name           string `json:"name"`
+	Value          string `json:"value"`
+	IsSecret       bool   `json:"isSecret"`
+	CreatedAt      int64  `json:"createdAt,omitempty"`
+	UpdatedAt      int64  `json:"updatedAt,omitempty"`
+}
+
+// SyntheticVariableRequest is the request body for creating or updating a synthetic variable.
+type SyntheticVariableRequest struct {
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	IsSecret bool   `json:"isSecret"`
+}
+
+// ListSyntheticVariables retrieves all synthetic variables.
+func (c *Client) ListSyntheticVariables() ([]SyntheticVariable, error) {
+	var variables []SyntheticVariable
+	err := c.doRequest(http.MethodGet, "/v1/synthetics/variables", nil, &variables)
+	if err != nil {
+		return nil, err
+	}
+	return variables, nil
+}
+
+// GetSyntheticVariable retrieves a synthetic variable by ID.
+func (c *Client) GetSyntheticVariable(id int) (*SyntheticVariable, error) {
+	variables, err := c.ListSyntheticVariables()
+	if err != nil {
+		return nil, err
+	}
+	for _, variable := range variables {
+		if variable.ID == id {
+			return &variable, nil
+		}
+	}
+	return nil, notFoundError("Synthetic variable not found")
+}
+
+// CreateSyntheticVariable creates a synthetic variable.
+func (c *Client) CreateSyntheticVariable(req SyntheticVariableRequest) (*SyntheticVariable, error) {
+	var variable SyntheticVariable
+	err := c.doRequest(http.MethodPost, "/v1/synthetics/variables", req, &variable)
+	if err != nil {
+		return nil, err
+	}
+	return &variable, nil
+}
+
+// UpdateSyntheticVariable updates a synthetic variable.
+func (c *Client) UpdateSyntheticVariable(id int, req SyntheticVariableRequest) (*SyntheticVariable, error) {
+	var variable SyntheticVariable
+	err := c.doRequest(http.MethodPut, fmt.Sprintf("/v1/synthetics/variables/%d", id), req, &variable)
+	if err != nil {
+		return nil, err
+	}
+	return &variable, nil
+}
+
+// DeleteSyntheticVariable deletes a synthetic variable.
+func (c *Client) DeleteSyntheticVariable(id int) error {
+	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/synthetics/variables/%d", id), nil, nil)
+}
