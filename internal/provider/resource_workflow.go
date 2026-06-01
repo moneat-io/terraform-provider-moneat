@@ -30,8 +30,10 @@ type WorkflowResourceModel struct {
 	Name            types.String `tfsdk:"name"`
 	TriggerName     types.String `tfsdk:"trigger_name"`
 	Enabled         types.Bool   `tfsdk:"enabled"`
+	Published       types.Bool   `tfsdk:"published"`
 	ConditionsJSON  types.String `tfsdk:"conditions_json"`
 	StepsJSON       types.String `tfsdk:"steps_json"`
+	GraphJSON       types.String `tfsdk:"graph_json"`
 	OnceForTemplate types.List   `tfsdk:"once_for_template"`
 	Version         types.Int64  `tfsdk:"version"`
 }
@@ -72,6 +74,12 @@ func (r *WorkflowResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Computed:    true,
 				Default:     booldefault.StaticBool(true),
 			},
+			"published": schema.BoolAttribute{
+				Description: "Whether the latest workflow version is published and eligible for event triggers.",
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(true),
+			},
 			"conditions_json": schema.StringAttribute{
 				Description: "Workflow conditions as JSON.",
 				Optional:    true,
@@ -83,6 +91,11 @@ func (r *WorkflowResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("[]"),
+			},
+			"graph_json": schema.StringAttribute{
+				Description: "Workflow graph as JSON. Use this for branch, retry, control, approval, and connector nodes.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"once_for_template": schema.ListAttribute{
 				Description: "Scope fields used to deduplicate workflow runs.",
@@ -127,7 +140,7 @@ func (r *WorkflowResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	payload, normalizedConditions, normalizedSteps, ok := workflowPayload(ctx, plan, &resp.Diagnostics)
+	payload, normalizedConditions, normalizedSteps, normalizedGraph, ok := workflowPayload(ctx, plan, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -137,6 +150,7 @@ func (r *WorkflowResource) Create(ctx context.Context, req resource.CreateReques
 		Enabled:         plan.Enabled.ValueBool(),
 		Conditions:      payload.Conditions,
 		Steps:           payload.Steps,
+		Graph:           payload.Graph,
 		OnceForTemplate: payload.OnceForTemplate,
 	}
 	workflow, err := r.client.CreateWorkflow(apiReq)
@@ -144,8 +158,13 @@ func (r *WorkflowResource) Create(ctx context.Context, req resource.CreateReques
 		resp.Diagnostics.AddError("Error creating workflow", err.Error())
 		return
 	}
+	workflow, err = r.setWorkflowPublished(workflow.ID, plan.Published.ValueBool())
+	if err != nil {
+		resp.Diagnostics.AddError("Error publishing workflow", err.Error())
+		return
+	}
 
-	mapWorkflowToState(ctx, &resp.Diagnostics, &plan, workflow, normalizedConditions, normalizedSteps)
+	mapWorkflowToState(ctx, &resp.Diagnostics, &plan, workflow, normalizedConditions, normalizedSteps, normalizedGraph)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -174,7 +193,7 @@ func (r *WorkflowResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	mapWorkflowToState(ctx, &resp.Diagnostics, &state, workflow, "", "")
+	mapWorkflowToState(ctx, &resp.Diagnostics, &state, workflow, "", "", "")
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -193,7 +212,7 @@ func (r *WorkflowResource) Update(ctx context.Context, req resource.UpdateReques
 		resp.Diagnostics.AddError("Error updating workflow", err.Error())
 		return
 	}
-	payload, normalizedConditions, normalizedSteps, ok := workflowPayload(ctx, plan, &resp.Diagnostics)
+	payload, normalizedConditions, normalizedSteps, normalizedGraph, ok := workflowPayload(ctx, plan, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -203,15 +222,20 @@ func (r *WorkflowResource) Update(ctx context.Context, req resource.UpdateReques
 		Enabled:         &enabled,
 		Conditions:      payload.Conditions,
 		Steps:           payload.Steps,
+		Graph:           payload.Graph,
 		OnceForTemplate: payload.OnceForTemplate,
 	}
-	workflow, err := r.client.UpdateWorkflow(id, apiReq)
-	if err != nil {
+	if _, err := r.client.UpdateWorkflow(id, apiReq); err != nil {
 		resp.Diagnostics.AddError("Error updating workflow", err.Error())
 		return
 	}
+	workflow, err := r.setWorkflowPublished(id, plan.Published.ValueBool())
+	if err != nil {
+		resp.Diagnostics.AddError("Error publishing workflow", err.Error())
+		return
+	}
 
-	mapWorkflowToState(ctx, &resp.Diagnostics, &plan, workflow, normalizedConditions, normalizedSteps)
+	mapWorkflowToState(ctx, &resp.Diagnostics, &plan, workflow, normalizedConditions, normalizedSteps, normalizedGraph)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -250,7 +274,7 @@ func (r *WorkflowResource) ImportState(ctx context.Context, req resource.ImportS
 	}
 
 	state := WorkflowResourceModel{}
-	mapWorkflowToState(ctx, &resp.Diagnostics, &state, workflow, "", "")
+	mapWorkflowToState(ctx, &resp.Diagnostics, &state, workflow, "", "", "")
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -260,6 +284,7 @@ func (r *WorkflowResource) ImportState(ctx context.Context, req resource.ImportS
 type workflowJSONPayload struct {
 	Conditions      json.RawMessage
 	Steps           json.RawMessage
+	Graph           json.RawMessage
 	OnceForTemplate []string
 }
 
@@ -267,27 +292,37 @@ func workflowPayload(
 	ctx context.Context,
 	model WorkflowResourceModel,
 	diags *diag.Diagnostics,
-) (workflowJSONPayload, string, string, bool) {
+) (workflowJSONPayload, string, string, string, bool) {
 	conditions, normalizedConditions, err := rawMessageFromJSONString(model.ConditionsJSON.ValueString())
 	if err != nil {
 		diags.AddError("Invalid workflow conditions JSON", err.Error())
-		return workflowJSONPayload{}, "", "", false
+		return workflowJSONPayload{}, "", "", "", false
 	}
 	steps, normalizedSteps, err := rawMessageFromJSONString(model.StepsJSON.ValueString())
 	if err != nil {
 		diags.AddError("Invalid workflow steps JSON", err.Error())
-		return workflowJSONPayload{}, "", "", false
+		return workflowJSONPayload{}, "", "", "", false
+	}
+	var graph json.RawMessage
+	normalizedGraph := ""
+	if !model.GraphJSON.IsNull() && !model.GraphJSON.IsUnknown() && model.GraphJSON.ValueString() != "" {
+		graph, normalizedGraph, err = rawMessageFromJSONString(model.GraphJSON.ValueString())
+		if err != nil {
+			diags.AddError("Invalid workflow graph JSON", err.Error())
+			return workflowJSONPayload{}, "", "", "", false
+		}
 	}
 	var onceForTemplate []string
 	diags.Append(model.OnceForTemplate.ElementsAs(ctx, &onceForTemplate, false)...)
 	if diags.HasError() {
-		return workflowJSONPayload{}, "", "", false
+		return workflowJSONPayload{}, "", "", "", false
 	}
 	return workflowJSONPayload{
 		Conditions:      conditions,
 		Steps:           steps,
+		Graph:           graph,
 		OnceForTemplate: onceForTemplate,
-	}, normalizedConditions, normalizedSteps, true
+	}, normalizedConditions, normalizedSteps, normalizedGraph, true
 }
 
 func mapWorkflowToState(
@@ -297,19 +332,25 @@ func mapWorkflowToState(
 	workflow *apiclient.Workflow,
 	conditionsJSON string,
 	stepsJSON string,
+	graphJSON string,
 ) {
 	model.ID = terraformID(workflow.ID)
 	model.Name = types.StringValue(workflow.Name)
 	model.TriggerName = types.StringValue(workflow.TriggerName)
 	model.Enabled = types.BoolValue(workflow.Enabled)
+	model.Published = types.BoolValue(workflow.Published)
 	if conditionsJSON == "" {
 		conditionsJSON = rawMessageString(workflow.Conditions)
 	}
 	if stepsJSON == "" {
 		stepsJSON = rawMessageString(workflow.Steps)
 	}
+	if graphJSON == "" {
+		graphJSON = rawMessageString(workflow.Graph)
+	}
 	model.ConditionsJSON = types.StringValue(conditionsJSON)
 	model.StepsJSON = types.StringValue(stepsJSON)
+	model.GraphJSON = types.StringValue(graphJSON)
 	model.Version = types.Int64Value(int64(workflow.Version))
 
 	onceForTemplate, listDiags := types.ListValueFrom(ctx, types.StringType, workflow.OnceForTemplate)
@@ -318,4 +359,11 @@ func mapWorkflowToState(
 		return
 	}
 	model.OnceForTemplate = onceForTemplate
+}
+
+func (r *WorkflowResource) setWorkflowPublished(id int, published bool) (*apiclient.Workflow, error) {
+	if published {
+		return r.client.PublishWorkflow(id)
+	}
+	return r.client.UnpublishWorkflow(id)
 }

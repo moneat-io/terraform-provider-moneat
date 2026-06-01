@@ -1,6 +1,7 @@
 package apiclient
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -84,4 +85,14 @@ func (c *Client) UpdateMcpAPIKey(id int, req UpdateMcpAPIKeyRequest) (*McpAPIKey
 // DeleteMcpAPIKey revokes an MCP API key.
 func (c *Client) DeleteMcpAPIKey(id int) error {
 	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/mcp/api-keys/%d", id), nil, nil)
+}
+
+// GetMcpToolCatalog retrieves the MCP tool and resource catalog as JSON.
+func (c *Client) GetMcpToolCatalog() (json.RawMessage, error) {
+	var catalog json.RawMessage
+	err := c.doRequest(http.MethodGet, "/v1/mcp/tool-catalog", nil, &catalog)
+	if err != nil {
+		return nil, err
+	}
+	return catalog, nil
 }
