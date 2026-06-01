@@ -161,6 +161,8 @@ func (p *MoneatProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewStatusPagesDataSource,
 		NewDashboardDataSource,
 		NewDashboardsDataSource,
+		NewWorkflowDataSource,
+		NewWorkflowsDataSource,
 		NewOnCallScheduleDataSource,
 		NewEscalationPolicyDataSource,
 		NewOrgMembersDataSource,

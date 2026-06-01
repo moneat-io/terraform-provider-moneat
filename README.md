@@ -110,6 +110,8 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 |-------------|-------------|
 | `moneat_project` | Look up a project by ID |
 | `moneat_projects` | List all projects |
+| `moneat_workflow` | Look up a workflow by ID |
+| `moneat_workflows` | List all workflows |
 | `moneat_mcp_tool_catalog` | Read the MCP tool and resource catalog |
 | `moneat_security_signals` | Read security signal triage data as JSON |
 | `moneat_security_detection_coverage` | Read security detection coverage as JSON |
