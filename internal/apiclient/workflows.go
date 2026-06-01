@@ -13,9 +13,11 @@ type Workflow struct {
 	TriggerName     string          `json:"trigger_name"`
 	Enabled         bool            `json:"enabled"`
 	Version         int             `json:"version"`
+	Published       bool            `json:"published"`
 	SystemKey       string          `json:"system_key,omitempty"`
 	Conditions      json.RawMessage `json:"conditions"`
 	Steps           json.RawMessage `json:"steps"`
+	Graph           json.RawMessage `json:"graph"`
 	OnceForTemplate []string        `json:"once_for_template"`
 	CreatedAt       string          `json:"created_at,omitempty"`
 	UpdatedAt       string          `json:"updated_at,omitempty"`
@@ -30,6 +32,7 @@ type CreateWorkflowRequest struct {
 	Enabled         bool            `json:"enabled"`
 	Conditions      json.RawMessage `json:"conditions"`
 	Steps           json.RawMessage `json:"steps"`
+	Graph           json.RawMessage `json:"graph,omitempty"`
 	OnceForTemplate []string        `json:"once_for_template"`
 }
 
@@ -39,6 +42,7 @@ type UpdateWorkflowRequest struct {
 	Enabled         *bool           `json:"enabled,omitempty"`
 	Conditions      json.RawMessage `json:"conditions,omitempty"`
 	Steps           json.RawMessage `json:"steps,omitempty"`
+	Graph           json.RawMessage `json:"graph,omitempty"`
 	OnceForTemplate []string        `json:"once_for_template"`
 }
 
@@ -85,4 +89,24 @@ func (c *Client) UpdateWorkflow(id int, req UpdateWorkflowRequest) (*Workflow, e
 // DeleteWorkflow deletes a workflow.
 func (c *Client) DeleteWorkflow(id int) error {
 	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/workflows/%d", id), nil, nil)
+}
+
+// PublishWorkflow publishes the latest workflow version.
+func (c *Client) PublishWorkflow(id int) (*Workflow, error) {
+	var workflow Workflow
+	err := c.doRequest(http.MethodPost, fmt.Sprintf("/v1/workflows/%d/publish", id), nil, &workflow)
+	if err != nil {
+		return nil, err
+	}
+	return &workflow, nil
+}
+
+// UnpublishWorkflow unpublishes the latest workflow version.
+func (c *Client) UnpublishWorkflow(id int) (*Workflow, error) {
+	var workflow Workflow
+	err := c.doRequest(http.MethodPost, fmt.Sprintf("/v1/workflows/%d/unpublish", id), nil, &workflow)
+	if err != nil {
+		return nil, err
+	}
+	return &workflow, nil
 }

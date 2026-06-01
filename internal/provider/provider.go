@@ -139,6 +139,9 @@ func (p *MoneatProvider) Resources(_ context.Context) []func() resource.Resource
 		NewFeatureFlagResource,
 		NewFeatureFlagConfigResource,
 		NewWorkflowResource,
+		NewWorkflowConnectionResource,
+		NewWorkflowConnectionGroupResource,
+		NewSecurityDetectionRuleResource,
 		NewSyntheticVariableResource,
 		NewMcpAPIKeyResource,
 		NewOtlpServiceMappingResource,
@@ -161,5 +164,11 @@ func (p *MoneatProvider) DataSources(_ context.Context) []func() datasource.Data
 		NewOnCallScheduleDataSource,
 		NewEscalationPolicyDataSource,
 		NewOrgMembersDataSource,
+		NewMcpToolCatalogDataSource,
+		NewSecuritySignalsDataSource,
+		NewSecurityDetectionCoverageDataSource,
+		NewSecurityVulnerabilitySummaryDataSource,
+		NewSecurityVulnerabilityFindingsDataSource,
+		NewSecurityVulnerabilityInventoryDataSource,
 	}
 }

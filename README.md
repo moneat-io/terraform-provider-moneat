@@ -96,6 +96,9 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 | `moneat_feature_flag_segment` | Feature flag targeting segments |
 | `moneat_feature_flag_sdk_key` | Feature flag SDK keys |
 | `moneat_workflow` | Alert and automation workflows |
+| `moneat_workflow_connection` | Vaulted workflow connector credentials |
+| `moneat_workflow_connection_group` | Workflow connector routing groups |
+| `moneat_security_detection_rule` | Security detection rules |
 | `moneat_synthetic_variable` | Reusable synthetic test variables |
 | `moneat_mcp_api_key` | MCP API keys and tool/resource permissions |
 | `moneat_otlp_service_mapping` | Telemetry service-to-project routing |
@@ -107,6 +110,12 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 |-------------|-------------|
 | `moneat_project` | Look up a project by ID |
 | `moneat_projects` | List all projects |
+| `moneat_mcp_tool_catalog` | Read the MCP tool and resource catalog |
+| `moneat_security_signals` | Read security signal triage data as JSON |
+| `moneat_security_detection_coverage` | Read security detection coverage as JSON |
+| `moneat_security_vulnerability_summary` | Read vulnerability summary data as JSON |
+| `moneat_security_vulnerability_findings` | Read vulnerability findings as JSON |
+| `moneat_security_vulnerability_inventory` | Read vulnerability package inventory as JSON |
 
 ## Configuration Reference
 
