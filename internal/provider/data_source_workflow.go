@@ -115,6 +115,10 @@ func (d *WorkflowsDataSource) Configure(
 }
 
 func (d *WorkflowDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	if !workflowClientConfigured(d.client, &resp.Diagnostics, "WorkflowDataSource.Read") {
+		return
+	}
+
 	var config WorkflowDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
@@ -140,6 +144,10 @@ func (d *WorkflowDataSource) Read(ctx context.Context, req datasource.ReadReques
 }
 
 func (d *WorkflowsDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	if !workflowClientConfigured(d.client, &resp.Diagnostics, "WorkflowsDataSource.Read") {
+		return
+	}
+
 	workflows, err := d.client.ListWorkflows()
 	if err != nil {
 		resp.Diagnostics.AddError("Error listing workflows", err.Error())
@@ -176,6 +184,17 @@ func configureWorkflowDataSource(
 		return
 	}
 	*client = configuredClient
+}
+
+func workflowClientConfigured(client *apiclient.Client, diags *diag.Diagnostics, caller string) bool {
+	if client != nil {
+		return true
+	}
+	diags.AddError(
+		"Provider not configured",
+		fmt.Sprintf("%s cannot read workflows because the API client is nil.", caller),
+	)
+	return false
 }
 
 func workflowDataSourceAttributes(requireID bool) map[string]schema.Attribute {
