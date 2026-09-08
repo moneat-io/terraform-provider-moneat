@@ -70,6 +70,7 @@ func (r *ResponseConfigurationResource) Schema(
 			"allow_destructive": schema.BoolAttribute{
 				Description: "Allow deletions during apply and destroy. Keep false unless the change is intentional.",
 				Optional:    true,
+				Computed:    true,
 				Default:     booldefault.StaticBool(false),
 			},
 			"remote_id": schema.StringAttribute{
@@ -239,11 +240,12 @@ func (r *ResponseConfigurationResource) apply(
 	expectedRevision *int,
 	diagnostics interface{ AddError(string, string) },
 ) {
-	configuration, normalizedConfiguration, err := rawMessageFromJSONString(plan.ConfigurationJSON.ValueString())
+	configuration, _, err := rawMessageFromJSONString(plan.ConfigurationJSON.ValueString())
 	if err != nil {
 		diagnostics.AddError("Invalid response configuration JSON", err.Error())
 		return
 	}
+	plannedConfiguration := plan.ConfigurationJSON
 	remotePlan, err := r.client.PlanResponseConfiguration(
 		configuration,
 		expectedRevision,
@@ -267,7 +269,7 @@ func (r *ResponseConfigurationResource) apply(
 		return
 	}
 	setResponseConfigurationState(plan, state)
-	plan.ConfigurationJSON = types.StringValue(normalizedConfiguration)
+	plan.ConfigurationJSON = plannedConfiguration
 }
 
 func setResponseConfigurationState(
