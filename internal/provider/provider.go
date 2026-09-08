@@ -21,8 +21,9 @@ type MoneatProvider struct {
 
 // MoneatProviderModel describes the provider data model.
 type MoneatProviderModel struct {
-	BaseURL types.String `tfsdk:"base_url"`
-	Token   types.String `tfsdk:"token"`
+	BaseURL        types.String `tfsdk:"base_url"`
+	Token          types.String `tfsdk:"token"`
+	ResponseAPIKey types.String `tfsdk:"response_api_key"`
 }
 
 // New returns a new provider factory function.
@@ -54,6 +55,12 @@ func (p *MoneatProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Optional:  true,
 				Sensitive: true,
 			},
+			"response_api_key": schema.StringAttribute{
+				Description: "Organization-scoped Response Automation API key for response configuration. Can also be " +
+					"set with the MONEAT_RESPONSE_API_KEY environment variable.",
+				Optional:  true,
+				Sensitive: true,
+			},
 		},
 	}
 }
@@ -81,16 +88,31 @@ func (p *MoneatProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		token = v
 	}
 
+	// A response-only configuration can use the automation key as the provider
+	// token. When ordinary resources are also managed, keep their existing
+	// token separate from the response API key.
+	var responseToken string
+	if !config.ResponseAPIKey.IsNull() && !config.ResponseAPIKey.IsUnknown() {
+		responseToken = config.ResponseAPIKey.ValueString()
+	} else if v := os.Getenv("MONEAT_RESPONSE_API_KEY"); v != "" {
+		responseToken = v
+	}
+	if token == "" {
+		token = responseToken
+	}
+
 	if token == "" {
 		resp.Diagnostics.AddError(
 			"Missing API Token",
-			"The provider requires a Moneat API token. Set the 'token' attribute in the provider block "+
-				"or the MONEAT_AUTH_TOKEN environment variable.",
+			"The provider requires a Moneat API token or response automation key. Set 'token' or "+
+				"'response_api_key' in the provider block, or use MONEAT_AUTH_TOKEN or "+
+				"MONEAT_RESPONSE_API_KEY.",
 		)
 		return
 	}
 
 	client := apiclient.NewClient(baseURL, token)
+	client.ResponseToken = responseToken
 
 	resp.DataSourceData = client
 	resp.ResourceData = client
@@ -146,6 +168,7 @@ func (p *MoneatProvider) Resources(_ context.Context) []func() resource.Resource
 		NewMcpAPIKeyResource,
 		NewOtlpServiceMappingResource,
 		NewProjectTargetResource,
+		NewResponseConfigurationResource,
 	}
 }
 

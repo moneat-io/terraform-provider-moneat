@@ -41,6 +41,7 @@ terraform {
 provider "moneat" {
   # base_url = "https://api.moneat.io"  # or MONEAT_BASE_URL env var
   # token    = var.moneat_token          # or MONEAT_AUTH_TOKEN env var
+  # response_api_key = var.moneat_response_api_key # or MONEAT_RESPONSE_API_KEY
 }
 
 resource "moneat_project" "backend" {
@@ -54,6 +55,22 @@ resource "moneat_uptime_monitor" "api_health" {
   type             = "http"
   interval_seconds = 60
 }
+
+resource "moneat_response_configuration" "incident_stack" {
+  configuration_json = jsonencode({
+    schemaVersion = 1
+    source        = "TERRAFORM"
+    resources = [
+      {
+        type = "TEAM"
+        id   = "00000000-0000-0000-0000-000000000001"
+        attributes = {
+          name = "Operations"
+        }
+      }
+    ]
+  })
+}
 ```
 
 ## Authentication
@@ -63,7 +80,17 @@ The provider authenticates using a bearer token. You can provide it in two ways:
 1. **Provider attribute**: Set `token` in the provider block
 2. **Environment variable**: Set `MONEAT_AUTH_TOKEN`
 
-Generate an auth token in Moneat under **Settings → Auth Tokens**, or via the API:
+For ordinary resources, generate an auth token in Moneat under **Settings → Auth Tokens**. The
+`moneat_response_configuration` resource uses the organization-scoped Response Automation API key
+with `configuration:read` and `configuration:write` scopes. Provide that key through
+`response_api_key` or `MONEAT_RESPONSE_API_KEY`; if no ordinary `token` is set, the response key
+can also bootstrap a response-only configuration.
+
+Import the organization-wide response package with the stable resource ID:
+
+```bash
+terraform import moneat_response_configuration.incident_stack response-configuration
+```
 
 ```bash
 curl -X POST https://api.moneat.io/v1/auth-tokens \
@@ -103,6 +130,7 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 | `moneat_mcp_api_key` | MCP API keys and tool/resource permissions |
 | `moneat_otlp_service_mapping` | Telemetry service-to-project routing |
 | `moneat_project_target` | Additional project DSN targets |
+| `moneat_response_configuration` | Durable response configuration package; excludes live incidents, alerts, and telemetry |
 
 ### Data Sources
 
@@ -125,6 +153,7 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 |-----------|-------------|---------|---------------------|
 | `base_url` | Moneat API base URL | `https://api.moneat.io` | `MONEAT_BASE_URL` |
 | `token` | API authentication token | — | `MONEAT_AUTH_TOKEN` |
+| `response_api_key` | Response Automation API key for `moneat_response_configuration` | — | `MONEAT_RESPONSE_API_KEY` |
 
 ## Development
 

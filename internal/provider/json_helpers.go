@@ -36,6 +36,19 @@ func rawMessageString(value json.RawMessage) string {
 	return normalized
 }
 
+func responseConfigurationStateString(value json.RawMessage) string {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(value, &object); err != nil {
+		return rawMessageString(value)
+	}
+	delete(object, "generatedAt")
+	normalized, err := json.Marshal(object)
+	if err != nil {
+		return rawMessageString(value)
+	}
+	return string(normalized)
+}
+
 func parseTerraformID(value types.String, label string) (int, error) {
 	id, err := strconv.Atoi(value.ValueString())
 	if err != nil {
