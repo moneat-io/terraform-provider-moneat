@@ -13,9 +13,10 @@ const defaultTimeout = 30 * time.Second
 
 // Client is the Moneat API client.
 type Client struct {
-	BaseURL    string
-	Token      string
-	HTTPClient *http.Client
+	BaseURL       string
+	Token         string
+	ResponseToken string
+	HTTPClient    *http.Client
 }
 
 // NewClient creates a new Moneat API client.
@@ -26,6 +27,27 @@ func NewClient(baseURL, token string) *Client {
 		HTTPClient: &http.Client{
 			Timeout: defaultTimeout,
 		},
+	}
+}
+
+// ResponseConfigurationClient returns a client authenticated with the optional
+// response automation key configured by the provider. It falls back to the
+// provider's primary token for backwards-compatible single-token setups.
+func (c *Client) ResponseConfigurationClient() *Client {
+	if c.ResponseToken == "" || c.ResponseToken == c.Token {
+		return c
+	}
+	return c.WithToken(c.ResponseToken)
+}
+
+// WithToken returns a client that shares the base URL and HTTP transport while
+// using a different bearer token.
+func (c *Client) WithToken(token string) *Client {
+	return &Client{
+		BaseURL:       c.BaseURL,
+		Token:         token,
+		ResponseToken: c.ResponseToken,
+		HTTPClient:    c.HTTPClient,
 	}
 }
 
@@ -44,6 +66,16 @@ func (e *APIError) Error() string {
 }
 
 func (c *Client) doRequest(method, path string, body interface{}, result interface{}) error {
+	return c.doRequestWithHeaders(method, path, body, result, nil)
+}
+
+func (c *Client) doRequestWithHeaders(
+	method string,
+	path string,
+	body interface{},
+	result interface{},
+	extraHeaders map[string]string,
+) error {
 	url := fmt.Sprintf("%s%s", c.BaseURL, path)
 
 	var reqBody io.Reader
@@ -63,6 +95,9 @@ func (c *Client) doRequest(method, path string, body interface{}, result interfa
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	for name, value := range extraHeaders {
+		req.Header.Set(name, value)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
