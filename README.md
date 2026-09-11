@@ -33,7 +33,7 @@ terraform {
   required_providers {
     moneat = {
       source  = "moneat-io/moneat"
-      version = "~> 0.1"
+      version = "~> 0.5"
     }
   }
 }
@@ -99,6 +99,14 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
   -d '{"name": "terraform"}'
 ```
 
+### Workflow publication governance
+
+When `moneat_workflow_organization_policy.require_approval` is enabled, Terraform does not
+self-approve workflow publication. An apply that requests `published = true` (including a nested
+schedule or execution-identity change to a published workflow) remains blocked until an authorized
+reviewer approves that version through MCP; rerun Terraform after the approval. Publication reviews
+and decisions intentionally remain operational MCP actions rather than Terraform resources.
+
 ## Resources
 
 ### Phase 1 (Core)
@@ -122,9 +130,13 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 | `moneat_feature_flag_environment` | Feature flag environments |
 | `moneat_feature_flag_segment` | Feature flag targeting segments |
 | `moneat_feature_flag_sdk_key` | Feature flag SDK keys |
-| `moneat_workflow` | Alert and automation workflows |
-| `moneat_workflow_connection` | Vaulted workflow connector credentials |
-| `moneat_workflow_connection_group` | Workflow connector routing groups |
+| `moneat_workflow` | UUID-addressed declarative alert and automation workflows |
+| `moneat_workflow_schedule` | Durable workflow schedules and overlap policy |
+| `moneat_workflow_grant` | Workflow member access grants |
+| `moneat_workflow_execution_identity` | Workflow execution identity selection |
+| `moneat_workflow_organization_policy` | Organization-wide workflow governance defaults |
+| `moneat_connector_installation` | Terraform-owned connector credentials and settings |
+| `moneat_connection_group` | Connector routing groups with UUID members |
 | `moneat_security_detection_rule` | Security detection rules |
 | `moneat_synthetic_variable` | Reusable synthetic test variables |
 | `moneat_mcp_api_key` | MCP API keys and tool/resource permissions |
@@ -140,6 +152,12 @@ curl -X POST https://api.moneat.io/v1/auth-tokens \
 | `moneat_projects` | List all projects |
 | `moneat_workflow` | Look up a workflow by ID |
 | `moneat_workflows` | List all workflows |
+| `moneat_workflow_catalog` | Read the workflow action catalog as JSON |
+| `moneat_workflow_blueprint` | Read one portable workflow blueprint |
+| `moneat_connector_providers` | Discover connector providers and uses |
+| `moneat_connector_installations` | Read redacted connector installations |
+| `moneat_connector_groups` | Read connector routing groups |
+| `moneat_connector_resources` | Read selectable external connector resources |
 | `moneat_mcp_tool_catalog` | Read the MCP tool and resource catalog |
 | `moneat_security_signals` | Read security signal triage data as JSON |
 | `moneat_security_detection_coverage` | Read security detection coverage as JSON |

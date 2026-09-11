@@ -18,8 +18,8 @@ build:
 # Install the provider locally for development
 .PHONY: install
 install: build
-	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/moneat-io/moneat/0.0.1/$$(go env GOOS)_$$(go env GOARCH)
-	mv terraform-provider-moneat ~/.terraform.d/plugins/registry.terraform.io/moneat-io/moneat/0.0.1/$$(go env GOOS)_$$(go env GOARCH)/
+	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/moneat-io/moneat/0.5.0/$$(go env GOOS)_$$(go env GOARCH)
+	mv terraform-provider-moneat ~/.terraform.d/plugins/registry.terraform.io/moneat-io/moneat/0.5.0/$$(go env GOOS)_$$(go env GOARCH)/
 
 # Generate documentation
 .PHONY: docs
