@@ -22,6 +22,14 @@ func TestUpdateWorkflowWithRetryRefreshesVersionAfterConflict(t *testing.T) {
 			}
 			writeWorkflow(t, writer, workflowID, version, false)
 		case http.MethodPut:
+			var update apiclient.UpdateWorkflowRequest
+			if err := json.NewDecoder(request.Body).Decode(&update); err != nil {
+				t.Fatalf("decode update request: %v", err)
+			}
+			wantVersion := putCount + 1
+			if update.ExpectedVersion == nil || *update.ExpectedVersion != wantVersion {
+				t.Fatalf("expected_version = %v, want %d", update.ExpectedVersion, wantVersion)
+			}
 			putCount++
 			if putCount == 1 {
 				writer.WriteHeader(http.StatusConflict)
