@@ -193,7 +193,11 @@ func mapWorkflowOrganizationPolicyToState(
 	}
 	model.CreatedAt = optionalString(policy.CreatedAt)
 	model.UpdatedAt = optionalString(policy.UpdatedAt)
-	triggers, triggerDiags := types.ListValueFrom(ctx, types.StringType, policy.AllowedTriggers)
+	allowed := policy.AllowedTriggers
+	if allowed == nil {
+		allowed = []string{}
+	}
+	triggers, triggerDiags := types.ListValueFrom(ctx, types.StringType, allowed)
 	diags.Append(triggerDiags...)
 	model.AllowedTriggers = triggers
 }

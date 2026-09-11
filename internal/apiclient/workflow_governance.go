@@ -7,7 +7,7 @@ type WorkflowGrant struct {
 	WorkflowID     string   `json:"workflow_id"`
 	UserID         string   `json:"user_id"`
 	Role           string   `json:"role"`
-	AllowedActions []string `json:"allowed_actions,omitempty"`
+	AllowedActions []string `json:"allowed_actions"`
 	GrantedBy      string   `json:"granted_by,omitempty"`
 	CreatedAt      string   `json:"created_at,omitempty"`
 	UpdatedAt      string   `json:"updated_at,omitempty"`
@@ -16,7 +16,7 @@ type WorkflowGrant struct {
 type WorkflowGrantRequest struct {
 	UserID         string   `json:"user_id"`
 	Role           string   `json:"role"`
-	AllowedActions []string `json:"allowed_actions,omitempty"`
+	AllowedActions []string `json:"allowed_actions"`
 }
 
 func workflowGrantPath(workflowID string) string {

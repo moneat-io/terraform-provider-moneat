@@ -7,6 +7,13 @@ import (
 	"github.com/moneat-io/terraform-provider-moneat/internal/apiclient"
 )
 
+func TestParseExternalAccountRejectsUnknownFields(t *testing.T) {
+	_, err := parseExternalAccount(types.StringValue(`{"customerID":"acct-123"}`))
+	if err == nil {
+		t.Fatal("parseExternalAccount() accepted an unknown selector field")
+	}
+}
+
 func TestImportedExternalAccountReconstructsProjectSelector(t *testing.T) {
 	tests := []struct {
 		name       string

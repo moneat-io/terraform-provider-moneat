@@ -1,6 +1,12 @@
 package provider
 
-import "github.com/moneat-io/terraform-provider-moneat/internal/apiclient"
+import (
+	"fmt"
+
+	"github.com/moneat-io/terraform-provider-moneat/internal/apiclient"
+)
+
+const workflowMutationMaxAttempts = 3
 
 // preserveWorkflowPublication keeps the caller's publication intent when a
 // companion resource (schedule or execution identity) creates a new version.
@@ -41,4 +47,44 @@ func workflowUpdateRequest(workflow *apiclient.Workflow) apiclient.UpdateWorkflo
 		Schedules:         workflow.Schedules,
 		ExecutionIdentity: workflow.ExecutionIdentity,
 	}
+}
+
+// updateWorkflowWithRetry rereads the complete workflow after an optimistic
+// version conflict, then rebuilds the caller's mutation from that fresh state.
+// This is shared by companion resources that update fields owned by the
+// workflow document itself.
+func updateWorkflowWithRetry(
+	client *apiclient.Client,
+	workflowID string,
+	mutate func(*apiclient.Workflow) (apiclient.UpdateWorkflowRequest, error),
+) (*apiclient.Workflow, error) {
+	var lastErr error
+	for attempt := 0; attempt < workflowMutationMaxAttempts; attempt++ {
+		workflow, err := client.GetWorkflow(workflowID)
+		if err != nil {
+			return nil, err
+		}
+		request, err := mutate(workflow)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := client.UpdateWorkflow(workflowID, request)
+		if err != nil {
+			if apiclient.IsConflict(err) {
+				lastErr = err
+				continue
+			}
+			return nil, err
+		}
+		published, err := preserveWorkflowPublication(client, workflow, updated, workflow.Published)
+		if err != nil {
+			if apiclient.IsConflict(err) {
+				lastErr = err
+				continue
+			}
+			return nil, err
+		}
+		return published, nil
+	}
+	return nil, fmt.Errorf("workflow update conflicted after %d attempts: %w", workflowMutationMaxAttempts, lastErr)
 }

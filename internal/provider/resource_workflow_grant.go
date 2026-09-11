@@ -230,7 +230,7 @@ func mapWorkflowGrantToState(
 	model.WorkflowID = types.StringValue(grant.WorkflowID)
 	model.UserID = types.StringValue(grant.UserID)
 	model.Role = types.StringValue(grant.Role)
-	if len(grant.AllowedActions) == 0 {
+	if grant.AllowedActions == nil {
 		model.AllowedActions = types.SetNull(types.StringType)
 	} else {
 		actions, actionDiags := types.SetValueFrom(ctx, types.StringType, grant.AllowedActions)
@@ -246,7 +246,7 @@ func workflowGrantActions(ctx context.Context, diags *diag.Diagnostics, value ty
 	if value.IsNull() || value.IsUnknown() {
 		return nil, true
 	}
-	var actions []string
+	actions := make([]string, 0)
 	diags.Append(value.ElementsAs(ctx, &actions, false)...)
 	return actions, !diags.HasError()
 }

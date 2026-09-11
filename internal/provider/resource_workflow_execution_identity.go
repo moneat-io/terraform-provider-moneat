@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/moneat-io/terraform-provider-moneat/internal/apiclient"
 )
@@ -55,6 +57,7 @@ func (r *WorkflowExecutionIdentityResource) Schema(_ context.Context, _ resource
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("initiator"),
+				Validators:  []validator.String{stringvalidator.OneOf("initiator", "owner", "service_principal")},
 			},
 			"service_principal_id": schema.StringAttribute{Optional: true, Computed: true},
 			"workflow_version":     schema.Int64Attribute{Computed: true},
@@ -109,7 +112,10 @@ func (r *WorkflowExecutionIdentityResource) Create(ctx context.Context, req reso
 		resp.Diagnostics.AddError("Error setting workflow execution identity", err.Error())
 		return
 	}
-	mapExecutionIdentityToState(&plan, workflowID, workflow)
+	if err := mapExecutionIdentityToState(&plan, workflowID, workflow); err != nil {
+		resp.Diagnostics.AddError("Error reading workflow execution identity", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -133,7 +139,10 @@ func (r *WorkflowExecutionIdentityResource) Read(ctx context.Context, req resour
 		resp.Diagnostics.AddError("Error reading workflow execution identity", err.Error())
 		return
 	}
-	mapExecutionIdentityToState(&state, workflowID, workflow)
+	if err := mapExecutionIdentityToState(&state, workflowID, workflow); err != nil {
+		resp.Diagnostics.AddError("Error reading workflow execution identity", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -157,7 +166,10 @@ func (r *WorkflowExecutionIdentityResource) Update(ctx context.Context, req reso
 		resp.Diagnostics.AddError("Error updating workflow execution identity", err.Error())
 		return
 	}
-	mapExecutionIdentityToState(&plan, workflowID, workflow)
+	if err := mapExecutionIdentityToState(&plan, workflowID, workflow); err != nil {
+		resp.Diagnostics.AddError("Error reading workflow execution identity", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -172,24 +184,20 @@ func (r *WorkflowExecutionIdentityResource) Delete(ctx context.Context, req reso
 		resp.Diagnostics.AddError("Invalid workflow ID", err.Error())
 		return
 	}
-	workflow, err := r.client.GetWorkflow(workflowID)
+	_, err = updateWorkflowWithRetry(r.client, workflowID, func(workflow *apiclient.Workflow) (apiclient.UpdateWorkflowRequest, error) {
+		identity, err := json.Marshal(workflowExecutionIdentityState{Type: "initiator"})
+		if err != nil {
+			return apiclient.UpdateWorkflowRequest{}, err
+		}
+		request := workflowUpdateRequest(workflow)
+		request.ExecutionIdentity = identity
+		return request, nil
+	})
 	if err != nil {
 		if apiclient.IsNotFound(err) {
 			return
 		}
-		resp.Diagnostics.AddError("Error reading workflow", err.Error())
-		return
-	}
-	identity, _ := json.Marshal(workflowExecutionIdentityState{Type: "initiator"})
-	request := workflowUpdateRequest(workflow)
-	request.ExecutionIdentity = identity
-	updated, err := r.client.UpdateWorkflow(workflowID, request)
-	if err != nil {
 		resp.Diagnostics.AddError("Error resetting workflow execution identity", err.Error())
-		return
-	}
-	if _, err := preserveWorkflowPublication(r.client, workflow, updated, workflow.Published); err != nil {
-		resp.Diagnostics.AddError("Error republishing workflow after execution identity reset", err.Error())
 	}
 }
 
@@ -205,7 +213,10 @@ func (r *WorkflowExecutionIdentityResource) ImportState(ctx context.Context, req
 		return
 	}
 	state := WorkflowExecutionIdentityResourceModel{}
-	mapExecutionIdentityToState(&state, workflowID, workflow)
+	if err := mapExecutionIdentityToState(&state, workflowID, workflow); err != nil {
+		resp.Diagnostics.AddError("Error importing workflow execution identity", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -218,40 +229,44 @@ func (r *WorkflowExecutionIdentityResource) updateIdentity(workflowID string, pl
 	if err != nil {
 		return nil, err
 	}
-	workflow, err := r.client.GetWorkflow(workflowID)
-	if err != nil {
-		return nil, err
-	}
-	request := workflowUpdateRequest(workflow)
-	request.ExecutionIdentity = raw
-	updated, err := r.client.UpdateWorkflow(workflowID, request)
-	if err != nil {
-		return nil, err
-	}
-	return preserveWorkflowPublication(r.client, workflow, updated, workflow.Published)
+	return updateWorkflowWithRetry(r.client, workflowID, func(workflow *apiclient.Workflow) (apiclient.UpdateWorkflowRequest, error) {
+		request := workflowUpdateRequest(workflow)
+		request.ExecutionIdentity = raw
+		return request, nil
+	})
 }
 
 func validateExecutionIdentity(model WorkflowExecutionIdentityResourceModel) error {
-	if model.ServicePrincipalID.IsNull() || model.ServicePrincipalID.IsUnknown() || model.ServicePrincipalID.ValueString() == "" {
+	if model.Type.IsNull() || model.Type.IsUnknown() {
 		return nil
 	}
-	if model.Type.IsUnknown() || model.Type.IsNull() || model.Type.ValueString() == "service_principal" {
+	identityType := model.Type.ValueString()
+	if identityType == "service_principal" {
+		if model.ServicePrincipalID.IsNull() || (!model.ServicePrincipalID.IsUnknown() && model.ServicePrincipalID.ValueString() == "") {
+			return fmt.Errorf("service_principal_id is required when type is service_principal")
+		}
+		return nil
+	}
+	if model.ServicePrincipalID.IsNull() || model.ServicePrincipalID.IsUnknown() || model.ServicePrincipalID.ValueString() == "" {
 		return nil
 	}
 	return fmt.Errorf("service_principal_id is only valid when type is service_principal")
 }
 
-func mapExecutionIdentityToState(model *WorkflowExecutionIdentityResourceModel, workflowID string, workflow *apiclient.Workflow) {
+func mapExecutionIdentityToState(model *WorkflowExecutionIdentityResourceModel, workflowID string, workflow *apiclient.Workflow) error {
 	model.ID = types.StringValue(workflowID)
 	model.WorkflowID = types.StringValue(workflowID)
 	model.WorkflowVersion = types.Int64Value(int64(workflow.Version))
 	var identity workflowExecutionIdentityState
 	if len(workflow.ExecutionIdentity) > 0 {
-		_ = json.Unmarshal(workflow.ExecutionIdentity, &identity)
+		if err := json.Unmarshal(workflow.ExecutionIdentity, &identity); err != nil {
+			return fmt.Errorf("invalid execution identity JSON: %w", err)
+		}
 	}
 	if identity.Type == "" {
 		identity.Type = "initiator"
 	}
 	model.Type = types.StringValue(identity.Type)
 	model.ServicePrincipalID = optionalString(identity.ServicePrincipalID)
+	return nil
 }

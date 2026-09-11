@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -162,17 +163,10 @@ func (r *ConnectorInstallationResource) Create(
 		resp.Diagnostics.AddError("Missing connector secret", "secret is required when creating a connector installation")
 		return
 	}
-	externalAccountJSON, err := optionalJSON(plan.ExternalAccountJSON, "external_account_json")
+	externalAccount, err := parseExternalAccount(plan.ExternalAccountJSON)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid external account JSON", err.Error())
 		return
-	}
-	var externalAccount apiclient.ConnectorExternalAccount
-	if len(externalAccountJSON) > 0 {
-		if err := json.Unmarshal(externalAccountJSON, &externalAccount); err != nil {
-			resp.Diagnostics.AddError("Invalid external account JSON", err.Error())
-			return
-		}
 	}
 	tags, ok := connectorTags(ctx, &resp.Diagnostics, plan.IdentifierTags)
 	if !ok {
@@ -239,6 +233,13 @@ func (r *ConnectorInstallationResource) Update(
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !plan.Secret.IsNull() && !plan.Secret.IsUnknown() && plan.Secret.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"Missing connector secret",
+			"secret must not be empty when rotating a connector credential",
+		)
 		return
 	}
 	if plan.Secret.IsNull() || plan.Secret.IsUnknown() || plan.Secret.ValueString() == state.Secret.ValueString() {
@@ -346,6 +347,35 @@ func optionalJSON(value types.String, name string) (json.RawMessage, error) {
 		return nil, fmt.Errorf("%s must be valid JSON: %w", name, err)
 	}
 	return json.RawMessage(normalized), nil
+}
+
+func parseExternalAccount(value types.String) (apiclient.ConnectorExternalAccount, error) {
+	raw, err := optionalJSON(value, "external_account_json")
+	if err != nil {
+		return apiclient.ConnectorExternalAccount{}, err
+	}
+	if len(raw) == 0 {
+		return apiclient.ConnectorExternalAccount{}, nil
+	}
+	var fields map[string]json.RawMessage
+	fieldDecoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := fieldDecoder.Decode(&fields); err != nil {
+		return apiclient.ConnectorExternalAccount{}, err
+	}
+	for field := range fields {
+		switch field {
+		case "projectId", "customerId", "managerCustomerId":
+		default:
+			return apiclient.ConnectorExternalAccount{}, fmt.Errorf("unknown external account field %q", field)
+		}
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var account apiclient.ConnectorExternalAccount
+	if err := decoder.Decode(&account); err != nil {
+		return apiclient.ConnectorExternalAccount{}, err
+	}
+	return account, nil
 }
 
 func connectorTags(ctx context.Context, diags *diag.Diagnostics, value types.Map) (map[string]string, bool) {

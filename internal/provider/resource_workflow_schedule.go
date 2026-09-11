@@ -57,7 +57,7 @@ func (r *WorkflowScheduleResource) Metadata(_ context.Context, req resource.Meta
 
 func (r *WorkflowScheduleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages one durable schedule attached to a UUID-addressed workflow.",
+		Description: "Manages one durable schedule attached to a UUID-addressed workflow. Use depends_on to serialize schedules when explicit ordering is required.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 			"workflow_id": schema.StringAttribute{
@@ -127,7 +127,7 @@ func (r *WorkflowScheduleResource) Create(ctx context.Context, req resource.Crea
 		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 		return
 	}
-	updated, err := r.replaceSchedule(workflowID, workflow, desired)
+	updated, err := r.replaceSchedule(workflowID, desired)
 	if err != nil {
 		resp.Diagnostics.AddError("Error saving workflow schedule", err.Error())
 		return
@@ -180,12 +180,7 @@ func (r *WorkflowScheduleResource) Update(ctx context.Context, req resource.Upda
 		resp.Diagnostics.AddError("Invalid workflow ID", err.Error())
 		return
 	}
-	workflow, err := r.client.GetWorkflow(workflowID)
-	if err != nil {
-		resp.Diagnostics.AddError("Error reading workflow", err.Error())
-		return
-	}
-	updated, err := r.replaceSchedule(workflowID, workflow, scheduleFromModel(plan))
+	updated, err := r.replaceSchedule(workflowID, scheduleFromModel(plan))
 	if err != nil {
 		resp.Diagnostics.AddError("Error saving workflow schedule", err.Error())
 		return
@@ -205,35 +200,31 @@ func (r *WorkflowScheduleResource) Delete(ctx context.Context, req resource.Dele
 		resp.Diagnostics.AddError("Invalid workflow ID", err.Error())
 		return
 	}
-	workflow, err := r.client.GetWorkflow(workflowID)
+	_, err = updateWorkflowWithRetry(r.client, workflowID, func(workflow *apiclient.Workflow) (apiclient.UpdateWorkflowRequest, error) {
+		schedules, err := decodeSchedules(workflow.Schedules)
+		if err != nil {
+			return apiclient.UpdateWorkflowRequest{}, fmt.Errorf("invalid workflow schedules JSON: %w", err)
+		}
+		filtered := make([]workflowScheduleState, 0, len(schedules))
+		for _, schedule := range schedules {
+			if schedule.ID != state.ScheduleID.ValueString() {
+				filtered = append(filtered, schedule)
+			}
+		}
+		raw, err := json.Marshal(filtered)
+		if err != nil {
+			return apiclient.UpdateWorkflowRequest{}, err
+		}
+		request := workflowUpdateRequest(workflow)
+		request.Schedules = raw
+		return request, nil
+	})
 	if err != nil {
 		if apiclient.IsNotFound(err) {
 			return
 		}
-		resp.Diagnostics.AddError("Error reading workflow", err.Error())
-		return
-	}
-	schedules, err := decodeSchedules(workflow.Schedules)
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid workflow schedules JSON", err.Error())
-		return
-	}
-	filtered := make([]workflowScheduleState, 0, len(schedules))
-	for _, schedule := range schedules {
-		if schedule.ID != state.ScheduleID.ValueString() {
-			filtered = append(filtered, schedule)
-		}
-	}
-	raw, _ := json.Marshal(filtered)
-	request := workflowUpdateRequest(workflow)
-	request.Schedules = raw
-	updated, err := r.client.UpdateWorkflow(workflowID, request)
-	if err != nil {
 		resp.Diagnostics.AddError("Error deleting workflow schedule", err.Error())
 		return
-	}
-	if _, err := preserveWorkflowPublication(r.client, workflow, updated, workflow.Published); err != nil {
-		resp.Diagnostics.AddError("Error republishing workflow after schedule deletion", err.Error())
 	}
 }
 
@@ -279,34 +270,33 @@ func scheduleFromModel(model WorkflowScheduleResourceModel) workflowScheduleStat
 	}
 }
 
-func (r *WorkflowScheduleResource) replaceSchedule(workflowID string, workflow *apiclient.Workflow, replacement workflowScheduleState) (*apiclient.Workflow, error) {
-	schedules, err := decodeSchedules(workflow.Schedules)
-	if err != nil {
-		return nil, err
-	}
-	found := false
-	for index := range schedules {
-		if schedules[index].ID == replacement.ID {
-			schedules[index] = replacement
-			found = true
+func (r *WorkflowScheduleResource) replaceSchedule(
+	workflowID string,
+	replacement workflowScheduleState,
+) (*apiclient.Workflow, error) {
+	return updateWorkflowWithRetry(r.client, workflowID, func(workflow *apiclient.Workflow) (apiclient.UpdateWorkflowRequest, error) {
+		schedules, err := decodeSchedules(workflow.Schedules)
+		if err != nil {
+			return apiclient.UpdateWorkflowRequest{}, err
 		}
-	}
-	if !found {
-		schedules = append(schedules, replacement)
-	}
-	raw, err := json.Marshal(schedules)
-	if err != nil {
-		return nil, err
-	}
-	version := workflow.Version
-	request := workflowUpdateRequest(workflow)
-	request.Schedules = raw
-	request.ExpectedVersion = &version
-	updated, err := r.client.UpdateWorkflow(workflowID, request)
-	if err != nil {
-		return nil, err
-	}
-	return preserveWorkflowPublication(r.client, workflow, updated, workflow.Published)
+		found := false
+		for index := range schedules {
+			if schedules[index].ID == replacement.ID {
+				schedules[index] = replacement
+				found = true
+			}
+		}
+		if !found {
+			schedules = append(schedules, replacement)
+		}
+		raw, err := json.Marshal(schedules)
+		if err != nil {
+			return apiclient.UpdateWorkflowRequest{}, err
+		}
+		request := workflowUpdateRequest(workflow)
+		request.Schedules = raw
+		return request, nil
+	})
 }
 
 func decodeSchedules(raw json.RawMessage) ([]workflowScheduleState, error) {

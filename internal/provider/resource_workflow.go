@@ -489,7 +489,7 @@ func optionalRawMessage(value types.String) (json.RawMessage, error) {
 }
 
 func optionalRawMessageState(value json.RawMessage) types.String {
-	if len(value) == 0 || string(value) == "null" {
+	if len(value) == 0 {
 		return types.StringNull()
 	}
 	return types.StringValue(rawMessageString(value))

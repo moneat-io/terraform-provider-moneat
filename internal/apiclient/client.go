@@ -148,6 +148,15 @@ func IsNotFound(err error) bool {
 	return false
 }
 
+// IsConflict returns true when the API rejected a write because the resource
+// version changed since it was read.
+func IsConflict(err error) bool {
+	if apiErr, ok := err.(*APIError); ok {
+		return apiErr.StatusCode == http.StatusConflict
+	}
+	return false
+}
+
 func notFoundError(message string) error {
 	return &APIError{
 		StatusCode: http.StatusNotFound,
