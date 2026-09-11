@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -60,3 +61,22 @@ func parseTerraformID(value types.String, label string) (int, error) {
 func terraformID(value int) types.String {
 	return types.StringValue(strconv.Itoa(value))
 }
+
+func optionalString(value string) types.String {
+	if value == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(value)
+}
+
+func parseTerraformUUID(value types.String, label string) (string, error) {
+	if value.IsNull() || value.IsUnknown() || value.ValueString() == "" {
+		return "", fmt.Errorf("%s is required", label)
+	}
+	if !uuidPattern.MatchString(value.ValueString()) {
+		return "", fmt.Errorf("invalid %s: expected UUID", label)
+	}
+	return value.ValueString(), nil
+}
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)

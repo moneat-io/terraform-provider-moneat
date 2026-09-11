@@ -26,16 +26,21 @@ type WorkflowResource struct {
 }
 
 type WorkflowResourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	TriggerName     types.String `tfsdk:"trigger_name"`
-	Enabled         types.Bool   `tfsdk:"enabled"`
-	Published       types.Bool   `tfsdk:"published"`
-	ConditionsJSON  types.String `tfsdk:"conditions_json"`
-	StepsJSON       types.String `tfsdk:"steps_json"`
-	GraphJSON       types.String `tfsdk:"graph_json"`
-	OnceForTemplate types.List   `tfsdk:"once_for_template"`
-	Version         types.Int64  `tfsdk:"version"`
+	ID                    types.String `tfsdk:"id"`
+	Name                  types.String `tfsdk:"name"`
+	TriggerName           types.String `tfsdk:"trigger_name"`
+	Enabled               types.Bool   `tfsdk:"enabled"`
+	Published             types.Bool   `tfsdk:"published"`
+	ConditionsJSON        types.String `tfsdk:"conditions_json"`
+	StepsJSON             types.String `tfsdk:"steps_json"`
+	GraphJSON             types.String `tfsdk:"graph_json"`
+	OnceForTemplate       types.List   `tfsdk:"once_for_template"`
+	RunOnceJSON           types.String `tfsdk:"run_once_json"`
+	InputSchemaJSON       types.String `tfsdk:"input_schema_json"`
+	TriggerNames          types.List   `tfsdk:"trigger_names"`
+	SchedulesJSON         types.String `tfsdk:"schedules_json"`
+	ExecutionIdentityJSON types.String `tfsdk:"execution_identity_json"`
+	Version               types.Int64  `tfsdk:"version"`
 }
 
 func NewWorkflowResource() resource.Resource {
@@ -106,6 +111,35 @@ func (r *WorkflowResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 					types.ListValueMust(types.StringType, []attr.Value{}),
 				),
 			},
+			"run_once_json": schema.StringAttribute{
+				Description: "Optional run-once/deduplication configuration as JSON.",
+				Optional:    true,
+				Computed:    true,
+			},
+			"input_schema_json": schema.StringAttribute{
+				Description: "Workflow input schema as JSON.",
+				Optional:    true,
+				Computed:    true,
+			},
+			"trigger_names": schema.ListAttribute{
+				Description: "Additional trigger names accepted by the workflow.",
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+				Default: listdefault.StaticValue(
+					types.ListValueMust(types.StringType, []attr.Value{}),
+				),
+			},
+			"schedules_json": schema.StringAttribute{
+				Description: "Durable workflow schedules as JSON.",
+				Optional:    true,
+				Computed:    true,
+			},
+			"execution_identity_json": schema.StringAttribute{
+				Description: "Workflow execution identity as JSON.",
+				Optional:    true,
+				Computed:    true,
+			},
 			"version": schema.Int64Attribute{
 				Description: "The current workflow version.",
 				Computed:    true,
@@ -145,20 +179,25 @@ func (r *WorkflowResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 	apiReq := apiclient.CreateWorkflowRequest{
-		Name:            plan.Name.ValueString(),
-		TriggerName:     plan.TriggerName.ValueString(),
-		Enabled:         plan.Enabled.ValueBool(),
-		Conditions:      payload.Conditions,
-		Steps:           payload.Steps,
-		Graph:           payload.Graph,
-		OnceForTemplate: payload.OnceForTemplate,
+		Name:              plan.Name.ValueString(),
+		TriggerName:       plan.TriggerName.ValueString(),
+		Enabled:           plan.Enabled.ValueBool(),
+		Conditions:        payload.Conditions,
+		Steps:             payload.Steps,
+		Graph:             payload.Graph,
+		OnceForTemplate:   payload.OnceForTemplate,
+		RunOnce:           payload.RunOnce,
+		InputSchema:       payload.InputSchema,
+		TriggerNames:      payload.TriggerNames,
+		Schedules:         payload.Schedules,
+		ExecutionIdentity: payload.ExecutionIdentity,
 	}
 	workflow, err := r.client.CreateWorkflow(apiReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating workflow", err.Error())
 		return
 	}
-	workflow, err = r.setWorkflowPublished(workflow.ID, plan.Published.ValueBool())
+	workflow, err = r.setWorkflowPublished(workflow.ID, plan.Published.ValueBool(), nil)
 	if err != nil {
 		resp.Diagnostics.AddError("Error publishing workflow", err.Error())
 		return
@@ -178,7 +217,7 @@ func (r *WorkflowResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	id, err := parseTerraformID(state.ID, "workflow ID")
+	id, err := parseTerraformUUID(state.ID, "workflow ID")
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading workflow", err.Error())
 		return
@@ -206,8 +245,17 @@ func (r *WorkflowResource) Update(ctx context.Context, req resource.UpdateReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	var state WorkflowResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	id, err := parseTerraformID(plan.ID, "workflow ID")
+	idValue := plan.ID
+	if idValue.IsNull() || idValue.IsUnknown() || idValue.ValueString() == "" {
+		idValue = state.ID
+	}
+	id, err := parseTerraformUUID(idValue, "workflow ID")
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating workflow", err.Error())
 		return
@@ -218,18 +266,29 @@ func (r *WorkflowResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 	enabled := plan.Enabled.ValueBool()
 	apiReq := apiclient.UpdateWorkflowRequest{
-		Name:            plan.Name.ValueString(),
-		Enabled:         &enabled,
-		Conditions:      payload.Conditions,
-		Steps:           payload.Steps,
-		Graph:           payload.Graph,
-		OnceForTemplate: payload.OnceForTemplate,
+		Name:              plan.Name.ValueString(),
+		Enabled:           &enabled,
+		Conditions:        payload.Conditions,
+		Steps:             payload.Steps,
+		Graph:             payload.Graph,
+		OnceForTemplate:   payload.OnceForTemplate,
+		ExpectedVersion:   workflowVersionPointer(state.Version),
+		RunOnce:           payload.RunOnce,
+		InputSchema:       payload.InputSchema,
+		TriggerNames:      payload.TriggerNames,
+		Schedules:         payload.Schedules,
+		ExecutionIdentity: payload.ExecutionIdentity,
 	}
-	if _, err := r.client.UpdateWorkflow(id, apiReq); err != nil {
+	updated, err := r.client.UpdateWorkflow(id, apiReq)
+	if err != nil {
 		resp.Diagnostics.AddError("Error updating workflow", err.Error())
 		return
 	}
-	workflow, err := r.setWorkflowPublished(id, plan.Published.ValueBool())
+	// Updating the declarative definition creates a new optimistic version. Use
+	// that returned version for the subsequent publication transition; the
+	// prior state version would always be stale after a successful update.
+	updatedVersion := workflowVersionPointer(types.Int64Value(int64(updated.Version)))
+	workflow, err := r.setWorkflowPublished(id, plan.Published.ValueBool(), updatedVersion)
 	if err != nil {
 		resp.Diagnostics.AddError("Error publishing workflow", err.Error())
 		return
@@ -249,7 +308,7 @@ func (r *WorkflowResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	id, err := parseTerraformID(state.ID, "workflow ID")
+	id, err := parseTerraformUUID(state.ID, "workflow ID")
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting workflow", err.Error())
 		return
@@ -262,7 +321,7 @@ func (r *WorkflowResource) Delete(ctx context.Context, req resource.DeleteReques
 }
 
 func (r *WorkflowResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	id, err := parseTerraformID(types.StringValue(req.ID), "workflow ID")
+	id, err := parseTerraformUUID(types.StringValue(req.ID), "workflow ID")
 	if err != nil {
 		resp.Diagnostics.AddError("Error importing workflow", err.Error())
 		return
@@ -282,10 +341,15 @@ func (r *WorkflowResource) ImportState(ctx context.Context, req resource.ImportS
 }
 
 type workflowJSONPayload struct {
-	Conditions      json.RawMessage
-	Steps           json.RawMessage
-	Graph           json.RawMessage
-	OnceForTemplate []string
+	Conditions        json.RawMessage
+	Steps             json.RawMessage
+	Graph             json.RawMessage
+	OnceForTemplate   []string
+	RunOnce           json.RawMessage
+	InputSchema       json.RawMessage
+	TriggerNames      []string
+	Schedules         json.RawMessage
+	ExecutionIdentity json.RawMessage
 }
 
 func workflowPayload(
@@ -317,11 +381,41 @@ func workflowPayload(
 	if diags.HasError() {
 		return workflowJSONPayload{}, "", "", "", false
 	}
+	triggerNames := []string{}
+	diags.Append(model.TriggerNames.ElementsAs(ctx, &triggerNames, false)...)
+	if diags.HasError() {
+		return workflowJSONPayload{}, "", "", "", false
+	}
+	runOnce, err := optionalRawMessage(model.RunOnceJSON)
+	if err != nil {
+		diags.AddError("Invalid workflow run_once JSON", err.Error())
+		return workflowJSONPayload{}, "", "", "", false
+	}
+	inputSchema, err := optionalRawMessage(model.InputSchemaJSON)
+	if err != nil {
+		diags.AddError("Invalid workflow input schema JSON", err.Error())
+		return workflowJSONPayload{}, "", "", "", false
+	}
+	schedules, err := optionalRawMessage(model.SchedulesJSON)
+	if err != nil {
+		diags.AddError("Invalid workflow schedules JSON", err.Error())
+		return workflowJSONPayload{}, "", "", "", false
+	}
+	executionIdentity, err := optionalRawMessage(model.ExecutionIdentityJSON)
+	if err != nil {
+		diags.AddError("Invalid workflow execution identity JSON", err.Error())
+		return workflowJSONPayload{}, "", "", "", false
+	}
 	return workflowJSONPayload{
-		Conditions:      conditions,
-		Steps:           steps,
-		Graph:           graph,
-		OnceForTemplate: onceForTemplate,
+		Conditions:        conditions,
+		Steps:             steps,
+		Graph:             graph,
+		OnceForTemplate:   onceForTemplate,
+		RunOnce:           runOnce,
+		InputSchema:       inputSchema,
+		TriggerNames:      triggerNames,
+		Schedules:         schedules,
+		ExecutionIdentity: executionIdentity,
 	}, normalizedConditions, normalizedSteps, normalizedGraph, true
 }
 
@@ -334,7 +428,7 @@ func mapWorkflowToState(
 	stepsJSON string,
 	graphJSON string,
 ) {
-	model.ID = terraformID(workflow.ID)
+	model.ID = types.StringValue(workflow.ID)
 	model.Name = types.StringValue(workflow.Name)
 	model.TriggerName = types.StringValue(workflow.TriggerName)
 	model.Enabled = types.BoolValue(workflow.Enabled)
@@ -359,11 +453,44 @@ func mapWorkflowToState(
 		return
 	}
 	model.OnceForTemplate = onceForTemplate
+	model.RunOnceJSON = optionalRawMessageState(workflow.RunOnce)
+	model.InputSchemaJSON = optionalRawMessageState(workflow.InputSchema)
+	triggerNames, triggerDiags := types.ListValueFrom(ctx, types.StringType, workflow.TriggerNames)
+	diags.Append(triggerDiags...)
+	model.TriggerNames = triggerNames
+	model.SchedulesJSON = optionalRawMessageState(workflow.Schedules)
+	model.ExecutionIdentityJSON = optionalRawMessageState(workflow.ExecutionIdentity)
 }
 
-func (r *WorkflowResource) setWorkflowPublished(id int, published bool) (*apiclient.Workflow, error) {
+func (r *WorkflowResource) setWorkflowPublished(id string, published bool, expectedVersion *int) (*apiclient.Workflow, error) {
 	if published {
-		return r.client.PublishWorkflow(id)
+		return r.client.PublishWorkflow(id, expectedVersion)
 	}
-	return r.client.UnpublishWorkflow(id)
+	return r.client.UnpublishWorkflow(id, expectedVersion)
+}
+
+func workflowVersionPointer(value types.Int64) *int {
+	if value.IsNull() || value.IsUnknown() || value.ValueInt64() <= 0 {
+		return nil
+	}
+	version := int(value.ValueInt64())
+	return &version
+}
+
+func optionalRawMessage(value types.String) (json.RawMessage, error) {
+	if value.IsNull() || value.IsUnknown() || value.ValueString() == "" {
+		return nil, nil
+	}
+	normalized, err := normalizeJSONString(value.ValueString())
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(normalized), nil
+}
+
+func optionalRawMessageState(value json.RawMessage) types.String {
+	if len(value) == 0 {
+		return types.StringNull()
+	}
+	return types.StringValue(rawMessageString(value))
 }

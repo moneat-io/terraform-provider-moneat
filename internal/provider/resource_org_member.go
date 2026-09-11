@@ -87,6 +87,10 @@ func (r *OrgMemberResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
+	if _, err := parseTerraformUUID(state.ID, "organization member ID"); err != nil {
+		resp.Diagnostics.AddError("Error reading organization member", err.Error())
+		return
+	}
 	members, err := r.client.ListOrgMembers()
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading organization member", err.Error())
@@ -120,21 +124,40 @@ func (r *OrgMemberResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	if _, err := parseTerraformUUID(state.ID, "organization member ID"); err != nil {
+		resp.Diagnostics.AddError("Error updating organization member", err.Error())
+		return
+	}
 	apiReq := apiclient.UpdateOrgMemberRequest{
 		Role: plan.Role.ValueString(),
 	}
 
-	member, err := r.client.UpdateOrgMember(state.ID.ValueString(), apiReq)
+	err := r.client.UpdateOrgMember(state.ID.ValueString(), apiReq)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating organization member", err.Error())
 		return
 	}
 
 	plan.ID = state.ID
-	plan.Email = types.StringValue(member.Email)
-	plan.Role = types.StringValue(member.Role)
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	// The current API returns a boolean acknowledgement for role updates. Read
+	// the member envelope back so email and the canonical role remain in state.
+	members, err := r.client.ListOrgMembers()
+	if err != nil {
+		resp.Diagnostics.AddError("Error reading updated organization member", err.Error())
+		return
+	}
+	for _, member := range members {
+		if member.ID == state.ID.ValueString() {
+			plan.Email = types.StringValue(member.Email)
+			plan.Role = types.StringValue(member.Role)
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			return
+		}
+	}
+	resp.Diagnostics.AddError(
+		"Organization member not found after update",
+		fmt.Sprintf("No organization member found with ID: %s", state.ID.ValueString()),
+	)
 }
 
 func (r *OrgMemberResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -144,6 +167,10 @@ func (r *OrgMemberResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
+	if _, err := parseTerraformUUID(state.ID, "organization member ID"); err != nil {
+		resp.Diagnostics.AddError("Error deleting organization member", err.Error())
+		return
+	}
 	err := r.client.DeleteOrgMember(state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting organization member", err.Error())
@@ -152,6 +179,10 @@ func (r *OrgMemberResource) Delete(ctx context.Context, req resource.DeleteReque
 }
 
 func (r *OrgMemberResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	if _, err := parseTerraformUUID(types.StringValue(req.ID), "organization member ID"); err != nil {
+		resp.Diagnostics.AddError("Error importing organization member", err.Error())
+		return
+	}
 	members, err := r.client.ListOrgMembers()
 	if err != nil {
 		resp.Diagnostics.AddError("Error importing organization member", err.Error())

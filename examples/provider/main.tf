@@ -2,7 +2,7 @@ terraform {
   required_providers {
     moneat = {
       source  = "moneat-io/moneat"
-      version = "~> 0.1"
+      version = "~> 0.5"
     }
   }
 }

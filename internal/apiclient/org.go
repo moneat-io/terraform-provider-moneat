@@ -3,14 +3,25 @@ package apiclient
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // OrgMember represents a Moneat organization member.
 type OrgMember struct {
-	ID       string `json:"id"`
+	// The current API exposes the user's opaque resource identifier as userId.
+	// Keep the provider model's field name stable while making the UUID contract
+	// explicit at the wire boundary.
+	ID       string `json:"userId"`
 	Email    string `json:"email"`
 	Role     string `json:"role"`
 	JoinedAt string `json:"joinedAt,omitempty"`
+}
+
+// OrgMembersResponse is the current organization-members response envelope.
+// Pending invitations are intentionally not modelled by the provider member
+// data source, but the envelope must be consumed before returning members.
+type OrgMembersResponse struct {
+	Members []OrgMember `json:"members"`
 }
 
 // UpdateOrgMemberRequest is the request body for updating an organization member's role.
@@ -20,27 +31,26 @@ type UpdateOrgMemberRequest struct {
 
 // ListOrgMembers retrieves all organization members.
 func (c *Client) ListOrgMembers() ([]OrgMember, error) {
-	var members []OrgMember
-	err := c.doRequest(http.MethodGet, "/v1/org/members", nil, &members)
+	var response OrgMembersResponse
+	err := c.doRequest(http.MethodGet, "/v1/org/members", nil, &response)
 	if err != nil {
 		return nil, err
 	}
-	return members, nil
+	return response.Members, nil
 }
 
 // UpdateOrgMember updates an organization member's role.
-func (c *Client) UpdateOrgMember(id string, req UpdateOrgMemberRequest) (*OrgMember, error) {
-	var member OrgMember
-	err := c.doRequest(http.MethodPut, fmt.Sprintf("/v1/org/members/%s", id), req, &member)
-	if err != nil {
-		return nil, err
-	}
-	return &member, nil
+//
+// The current API returns an acknowledgement rather than a member resource;
+// callers should reload the organization member envelope when they need the
+// canonical email and role values.
+func (c *Client) UpdateOrgMember(id string, req UpdateOrgMemberRequest) error {
+	return c.doRequest(http.MethodPut, fmt.Sprintf("/v1/org/members/%s/role", url.PathEscape(id)), req, nil)
 }
 
 // DeleteOrgMember removes a member from the organization.
 func (c *Client) DeleteOrgMember(id string) error {
-	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/org/members/%s", id), nil, nil)
+	return c.doRequest(http.MethodDelete, fmt.Sprintf("/v1/org/members/%s", url.PathEscape(id)), nil, nil)
 }
 
 // OrgInvitation represents a Moneat organization invitation.

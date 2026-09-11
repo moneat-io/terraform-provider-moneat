@@ -23,21 +23,26 @@ type WorkflowsDataSource struct {
 }
 
 type WorkflowDataSourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	TriggerName     types.String `tfsdk:"trigger_name"`
-	Enabled         types.Bool   `tfsdk:"enabled"`
-	Published       types.Bool   `tfsdk:"published"`
-	ConditionsJSON  types.String `tfsdk:"conditions_json"`
-	StepsJSON       types.String `tfsdk:"steps_json"`
-	GraphJSON       types.String `tfsdk:"graph_json"`
-	OnceForTemplate types.List   `tfsdk:"once_for_template"`
-	Version         types.Int64  `tfsdk:"version"`
-	SystemKey       types.String `tfsdk:"system_key"`
-	CreatedAt       types.String `tfsdk:"created_at"`
-	UpdatedAt       types.String `tfsdk:"updated_at"`
-	LastRunAt       types.String `tfsdk:"last_run_at"`
-	RunCount        types.Int64  `tfsdk:"run_count"`
+	ID                    types.String `tfsdk:"id"`
+	Name                  types.String `tfsdk:"name"`
+	TriggerName           types.String `tfsdk:"trigger_name"`
+	Enabled               types.Bool   `tfsdk:"enabled"`
+	Published             types.Bool   `tfsdk:"published"`
+	ConditionsJSON        types.String `tfsdk:"conditions_json"`
+	StepsJSON             types.String `tfsdk:"steps_json"`
+	GraphJSON             types.String `tfsdk:"graph_json"`
+	OnceForTemplate       types.List   `tfsdk:"once_for_template"`
+	RunOnceJSON           types.String `tfsdk:"run_once_json"`
+	InputSchemaJSON       types.String `tfsdk:"input_schema_json"`
+	TriggerNames          types.List   `tfsdk:"trigger_names"`
+	SchedulesJSON         types.String `tfsdk:"schedules_json"`
+	ExecutionIdentityJSON types.String `tfsdk:"execution_identity_json"`
+	Version               types.Int64  `tfsdk:"version"`
+	SystemKey             types.String `tfsdk:"system_key"`
+	CreatedAt             types.String `tfsdk:"created_at"`
+	UpdatedAt             types.String `tfsdk:"updated_at"`
+	LastRunAt             types.String `tfsdk:"last_run_at"`
+	RunCount              types.Int64  `tfsdk:"run_count"`
 }
 
 type WorkflowsDataSourceModel struct {
@@ -125,7 +130,7 @@ func (d *WorkflowDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	id, err := parseTerraformID(config.ID, "workflow ID")
+	id, err := parseTerraformUUID(config.ID, "workflow ID")
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading workflow", err.Error())
 		return
@@ -267,6 +272,27 @@ func workflowDataSourceAttributes(requireID bool) map[string]schema.Attribute {
 			Description: "Number of workflow runs reported by the API.",
 			Computed:    true,
 		},
+		"run_once_json": schema.StringAttribute{
+			Description: "Run-once/deduplication configuration as JSON.",
+			Computed:    true,
+		},
+		"input_schema_json": schema.StringAttribute{
+			Description: "Workflow input schema as JSON.",
+			Computed:    true,
+		},
+		"trigger_names": schema.ListAttribute{
+			Description: "Additional workflow trigger names.",
+			Computed:    true,
+			ElementType: types.StringType,
+		},
+		"schedules_json": schema.StringAttribute{
+			Description: "Durable workflow schedules as JSON.",
+			Computed:    true,
+		},
+		"execution_identity_json": schema.StringAttribute{
+			Description: "Workflow execution identity as JSON.",
+			Computed:    true,
+		},
 	}
 }
 
@@ -277,21 +303,28 @@ func workflowDataSourceModel(
 ) WorkflowDataSourceModel {
 	onceForTemplate, listDiags := types.ListValueFrom(ctx, types.StringType, workflow.OnceForTemplate)
 	diags.Append(listDiags...)
+	triggerNames, triggerDiags := types.ListValueFrom(ctx, types.StringType, workflow.TriggerNames)
+	diags.Append(triggerDiags...)
 	return WorkflowDataSourceModel{
-		ID:              terraformID(workflow.ID),
-		Name:            types.StringValue(workflow.Name),
-		TriggerName:     types.StringValue(workflow.TriggerName),
-		Enabled:         types.BoolValue(workflow.Enabled),
-		Published:       types.BoolValue(workflow.Published),
-		ConditionsJSON:  types.StringValue(rawMessageString(workflow.Conditions)),
-		StepsJSON:       types.StringValue(rawMessageString(workflow.Steps)),
-		GraphJSON:       types.StringValue(rawMessageString(workflow.Graph)),
-		OnceForTemplate: onceForTemplate,
-		Version:         types.Int64Value(int64(workflow.Version)),
-		SystemKey:       types.StringValue(workflow.SystemKey),
-		CreatedAt:       types.StringValue(workflow.CreatedAt),
-		UpdatedAt:       types.StringValue(workflow.UpdatedAt),
-		LastRunAt:       types.StringValue(workflow.LastRunAt),
-		RunCount:        types.Int64Value(workflow.RunCount),
+		ID:                    types.StringValue(workflow.ID),
+		Name:                  types.StringValue(workflow.Name),
+		TriggerName:           types.StringValue(workflow.TriggerName),
+		Enabled:               types.BoolValue(workflow.Enabled),
+		Published:             types.BoolValue(workflow.Published),
+		ConditionsJSON:        types.StringValue(rawMessageString(workflow.Conditions)),
+		StepsJSON:             types.StringValue(rawMessageString(workflow.Steps)),
+		GraphJSON:             types.StringValue(rawMessageString(workflow.Graph)),
+		OnceForTemplate:       onceForTemplate,
+		RunOnceJSON:           optionalRawMessageState(workflow.RunOnce),
+		InputSchemaJSON:       optionalRawMessageState(workflow.InputSchema),
+		TriggerNames:          triggerNames,
+		SchedulesJSON:         optionalRawMessageState(workflow.Schedules),
+		ExecutionIdentityJSON: optionalRawMessageState(workflow.ExecutionIdentity),
+		Version:               types.Int64Value(int64(workflow.Version)),
+		SystemKey:             types.StringValue(workflow.SystemKey),
+		CreatedAt:             types.StringValue(workflow.CreatedAt),
+		UpdatedAt:             types.StringValue(workflow.UpdatedAt),
+		LastRunAt:             types.StringValue(workflow.LastRunAt),
+		RunCount:              types.Int64Value(workflow.RunCount),
 	}
 }
